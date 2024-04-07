@@ -142,6 +142,14 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
     public var isVoid: Bool {
         normalizedDescription == "\(Void.self)"
     }
+    
+    /// Gets whether the type is optional
+    public var isOptional: Bool {
+        if case .optional = self {
+            return true
+        }
+        return false
+    }
 
     // TODO: Generate type conversions with macro?
     /// Attempts to get the type as a simple type.
