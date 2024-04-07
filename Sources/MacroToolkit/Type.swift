@@ -145,8 +145,8 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
     
     /// Gets whether the type is optional
     public var isOptional: Bool {
-        if case .optional = self {
-            return true
+        if case .simple(let normalizedSimpleType) = self.normalized() {
+            return normalizedSimpleType.name == "Optional"
         }
         return false
     }
