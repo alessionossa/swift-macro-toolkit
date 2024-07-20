@@ -135,7 +135,7 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
 
     /// A normalized description of the type (e.g. for `()` this would be `Void`).
     public var normalizedDescription: String {
-        self.normalized()._syntax.withoutTrivia().description
+        normalized()._syntax.withoutTrivia().description
     }
 
     /// Gets whether the type is a void type (i.e. `Void`, `()`, `(Void)`, `((((()))))`, etc.).
@@ -186,21 +186,30 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
             return NormalizedType(stringLiteral: base)
         case .classRestriction(let type):
             // Not handling `_attributedSyntax` because `classRestriction` cannot have any attribute
-            
-            // let normalizedType: NormalizedType = "AnyObject"
             let normalizedType: NormalizedType = .simple(.init(.init(
                 leadingTrivia: type._baseSyntax.leadingTrivia,
                 name: .identifier("AnyObject"),
                 trailingTrivia: type._baseSyntax.trailingTrivia
             )))
+            
             return normalizedType
-            
         case .composition(let type):
-            // Looks like there can only be simple types in composition, with no generics, and therefore we
-            // don't ned to recursively normalize
+            var compositionTypeSyntax: CompositionTypeSyntax = type._baseSyntax
+            var attributedTypeSyntax: AttributedTypeSyntax? = type._attributedSyntax
             
-            return .composition(.init(type._baseSyntax, attributedSyntax: type._attributedSyntax))
-        case .someOrAny(let type):            
+            let arrayOfCompositionElements = compositionTypeSyntax.elements.map { compositionElement in
+                let normalizedType = Type(compositionElement.type).normalized()
+                let updatedElementType = TypeSyntax(normalizedType._syntax)
+                var newCompositionElement = compositionElement
+                newCompositionElement.type = updatedElementType
+                return newCompositionElement
+            }
+            
+            compositionTypeSyntax.elements = .init(arrayOfCompositionElements)
+            attributedTypeSyntax?.baseType = TypeSyntax(compositionTypeSyntax)
+            
+            return .composition(.init(compositionTypeSyntax, attributedSyntax: attributedTypeSyntax))
+        case .someOrAny(let type):
             var someOrAnyTypeSyntax: SomeOrAnyTypeSyntax = type._baseSyntax
             var attributedTypeSyntax: AttributedTypeSyntax? = type._attributedSyntax
             
@@ -223,7 +232,6 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
                 base = base.addingAttributes(from: attributedTypeSyntax)
             }
             return NormalizedType(stringLiteral: base)
-            
         case .function(let type):
             var functionTypeSyntax: FunctionTypeSyntax
             var attributedTypeSyntax: AttributedTypeSyntax? = nil
@@ -247,7 +255,6 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
             attributedTypeSyntax?.baseType = TypeSyntax(functionTypeSyntax)
                 
             return .function(.init(functionTypeSyntax, attributedSyntax: attributedTypeSyntax))
-            
         case .implicitlyUnwrappedOptional(let type):
             var implicitlyUnwrappedOptionalTypeSyntax: ImplicitlyUnwrappedOptionalTypeSyntax = type._baseSyntax
             var attributedTypeSyntax: AttributedTypeSyntax? = type._attributedSyntax
@@ -257,7 +264,6 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
             attributedTypeSyntax?.baseType = TypeSyntax(implicitlyUnwrappedOptionalTypeSyntax)
             
             return .implicitlyUnwrappedOptional(.init(implicitlyUnwrappedOptionalTypeSyntax, attributedSyntax: attributedTypeSyntax))
-            
         case .member(let type):
             var memberTypeSyntax: MemberTypeSyntax = type._baseSyntax
             var attributedTypeSyntax: AttributedTypeSyntax? = type._attributedSyntax
@@ -269,7 +275,6 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
             attributedTypeSyntax?.baseType = TypeSyntax(memberTypeSyntax)
             
             return .member(.init(memberTypeSyntax, attributedSyntax: attributedTypeSyntax))
-            
         case .metatype(let type):
             let baseType = type._baseSyntax
             let memberTypeSyntax = MemberTypeSyntax.init(
@@ -287,26 +292,25 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
         case .missing(let type):
             return .missing(.init(type._baseSyntax, attributedSyntax: type._attributedSyntax))
         case .optional(let type):
-            var optionalTypeSyntax: OptionalTypeSyntax = type._baseSyntax
-            var attributedTypeSyntax: AttributedTypeSyntax? = type._attributedSyntax
+            let optionalTypeSyntax: OptionalTypeSyntax = type._baseSyntax
+            let attributedTypeSyntax: AttributedTypeSyntax? = type._attributedSyntax
             let normalizedElement = Type(optionalTypeSyntax.wrappedType).normalized()
-            optionalTypeSyntax.wrappedType = TypeSyntax(normalizedElement._syntax)
-            attributedTypeSyntax?.baseType = TypeSyntax(optionalTypeSyntax)
             
-//            let identifierSyntax = IdentifierTypeSyntax(
-//                leadingTrivia: optionalTypeSyntax.leadingTrivia,
-//                name: .identifier("Optional"),
-//                genericArgumentClause: .init(
-//                    arguments: .init(arrayLiteral: .init(argument: optionalTypeSyntax.wrappedType))
-//                ),
-//                trailingTrivia: optionalTypeSyntax.leadingTrivia
-//            )
-            
-            var base = "Optional<\(optionalTypeSyntax.wrappedType)>"
+            let identifierSyntax = IdentifierTypeSyntax(
+                leadingTrivia: optionalTypeSyntax.leadingTrivia,
+                name: .identifier("Optional"),
+                genericArgumentClause: .init(
+                    arguments: .init(arrayLiteral: .init(argument: TypeSyntax(normalizedElement._syntax)))
+                ),
+                trailingTrivia: optionalTypeSyntax.leadingTrivia
+            )
+
             if let attributedTypeSyntax {
-                base = base.addingAttributes(from: attributedTypeSyntax)
+                let normalizedAttributedTypeSyntax = identifierSyntax.addingAttributes(from: attributedTypeSyntax)
+                return .simple(.init(identifierSyntax, attributedSyntax: normalizedAttributedTypeSyntax))
+            } else {
+                return .simple(.init(identifierSyntax))
             }
-            return NormalizedType(stringLiteral: base)
         case .packExpansion(let type):
             // Looks like there can only be simple identifiers in pack expansions, with no generics, and therefore we
             // don't ned to recursively normalize
@@ -341,8 +345,11 @@ public enum `Type`: TypeProtocol, SyntaxExpressibleByStringInterpolation {
         case .tuple(let type):
             if type.elements.count == 1 {
                 let child = type.elements[0]
-                if case .tuple(_) = child {
+                switch child {
+                case .tuple, .simple:
                     return child.normalized()
+                default:
+                    break
                 }
             }
             
@@ -392,6 +399,23 @@ fileprivate extension String {
         }
         
         return updatedString
+    }
+}
+
+fileprivate extension TypeSyntaxProtocol {
+    /// Builds a `AttributedTypeSyntax` attaching the attributes and
+    /// the specifiers of the attributed type syntax.
+    /// - Parameter attributedType: The `AttributedTypeSyntax` which `attributes`
+    /// and `specifier` should be attached to the `TypeSyntax`.
+    /// - Returns: A `AttributedTypeSyntax` with elements from the attributed type syntax attached to the original `TypeSyntax`.
+    func addingAttributes(from attributedType: AttributedTypeSyntax) -> AttributedTypeSyntax {
+        return AttributedTypeSyntax(
+            leadingTrivia: attributedType.leadingTrivia,
+            specifier: attributedType.specifier,
+            attributes: attributedType.attributes,
+            baseType: self,
+            trailingTrivia: attributedType.trailingTrivia
+        )
     }
 }
 

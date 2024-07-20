@@ -717,6 +717,19 @@ final class MacroToolkitTests: XCTestCase {
         XCTAssertEqual(normalizedType.description, "(Optional<()>)")
     }
     
+    func testNormalizationTuple() {        
+        let type1: `Type` = "(Optional<()>)"
+        let type2: `Type` = "((Int) -> (Int)) -> String"
+        
+        let normalizedType1 = type1.normalized()
+        let normalizedType2 = type2.normalized()
+
+        XCTAssertEqual(normalizedType1.description, "Optional<()>")
+        XCTAssertEqual(normalizedType2.description, "((Int) -> Int) -> String")
+        XCTAssertEqual(normalizedType1.description, "\(((Optional<()>)).self)")
+        XCTAssertEqual(normalizedType2.description, "\((((Int) -> (Int)) -> String).self)")
+    }
+    
     func testNormalizationNestedArrays() {
         let type: `Type` = "[[Int]]"
         
@@ -747,14 +760,17 @@ final class MacroToolkitTests: XCTestCase {
         let type1: `Type` = "any Decodable & Identifiable"
         let type2: `Type` = "(inout any Decodable & Identifiable) -> Void"
         let type3: `Type` = "(inout Decodable & Codable) -> ([Int])"
+        let type4: `Type` = "(Encodable & Sequence<Int?>) & Equatable"
         
         let normalizedType1 = type1.normalized()
         let normalizedType2 = type2.normalized()
         let normalizedType3 = type3.normalized()
+        let normalizedType4 = type4.normalized()
 
         XCTAssertEqual(normalizedType1.description, "any Decodable & Identifiable")
         XCTAssertEqual(normalizedType2.description, "(inout any Decodable & Identifiable) -> ()")
         XCTAssertEqual(normalizedType3.description, "(inout Decodable & Codable) -> (Array<Int>)")
+        XCTAssertEqual(normalizedType4.description, "(Encodable & Sequence<Optional<Int>>) & Equatable")
     }
     
     func testNormalizationSomeOrAny() {
@@ -876,7 +892,7 @@ final class MacroToolkitTests: XCTestCase {
     
     func testNormalizationAttributedTuple() {
         let declSyntax: DeclSyntax = """
-        let interestingType: (inout [Int], String) -> Float = { _,_ in
+        let interestingType: (inout [Int], String) -> Float = { _, _ in
             return 3
         }
         """
